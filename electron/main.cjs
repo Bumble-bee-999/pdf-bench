@@ -17,6 +17,33 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 
 const isDev = !app.isPackaged;
+
+/* ---------------- diagnostics ----------------
+ * A desktop app that exits silently is impossible to support, so every
+ * startup failure is written to a log file next to the user's app data and,
+ * where it matters, shown in a dialog. Nothing is sent anywhere. */
+const fsSync = require('node:fs');
+let logFile = null;
+function log(...args) {
+  const line = `${new Date().toISOString()} ${args.map((a) => (a instanceof Error ? (a.stack || a.message) : String(a))).join(' ')}\n`;
+  try {
+    if (!logFile) logFile = path.join(app.getPath('userData'), 'pdfbench.log');
+    fsSync.mkdirSync(path.dirname(logFile), { recursive: true });
+    fsSync.appendFileSync(logFile, line);
+  } catch { /* logging must never be the thing that crashes the app */ }
+  // A GUI app launched from the Start menu may have no usable stdout; touching
+  // it can throw EBADF, so it is guarded rather than trusted.
+  try { if (isDev) console.log(line.trimEnd()); } catch { /* no console attached */ }
+}
+function fatal(title, err) {
+  log('FATAL', title, err);
+  try {
+    dialog.showErrorBox('PDF Bench could not start',
+      `${title}\n\n${err instanceof Error ? err.message : String(err)}\n\nDetails were saved to:\n${logFile || '(no log available)'}`);
+  } catch { /* nothing else we can do */ }
+}
+process.on('uncaughtException', (err) => fatal('An unexpected error occurred.', err));
+process.on('unhandledRejection', (err) => log('unhandledRejection', err));
 // Works in both layouts: alongside the source in development, and inside
 // app.asar once packaged (Electron's fs reads through the archive).
 const ROOT = path.join(__dirname, '..', 'dist');
@@ -119,7 +146,7 @@ function hardenSession(ses) {
   // No network. Anything that is not our own protocol is refused.
   ses.webRequest.onBeforeRequest((details, callback) => {
     const ok = /^(app|devtools|blob|data):/i.test(details.url);
-    if (!ok) console.warn('[blocked outbound request]', details.url.slice(0, 120));
+    if (!ok) log('[blocked outbound request]', details.url.slice(0, 120));
     callback({ cancel: !ok });
   });
   ses.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
@@ -154,6 +181,7 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
+    log('ready-to-show');
     mainWindow.show();
     if (pendingOpen) { sendFile(pendingOpen); pendingOpen = null; }
     // Headless self-check used by `npm run test:desktop`: render, save a
@@ -172,6 +200,28 @@ function createWindow() {
     }
   });
   mainWindow.on('closed', () => { mainWindow = null; });
+
+  const wc = mainWindow.webContents;
+  wc.on('did-fail-load', (_e, code, desc, url) => {
+    log('did-fail-load', code, desc, url);
+    if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
+    fatal('The interface failed to load.', new Error(`${desc} (${code}) while loading ${url}`));
+  });
+  wc.on('render-process-gone', (_e, details) => {
+    log('render-process-gone', JSON.stringify(details));
+    if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
+    fatal('The interface process stopped unexpectedly.', new Error(`reason: ${details.reason}`));
+  });
+  wc.on('did-finish-load', () => log('did-finish-load'));
+  wc.on('preload-error', (_e, file, err) => log('preload-error', file, err));
+  wc.on('console-message', (_e, level, message, line, source) => {
+    if (level >= 2) log('renderer', message, `${source}:${line}`);
+  });
+  // Never leave the user staring at nothing: if the page has not signalled
+  // readiness shortly after loading, show the window anyway.
+  setTimeout(() => { if (mainWindow && !mainWindow.isVisible()) { log('window shown by fallback timer'); mainWindow.show(); } }, 6000);
+
+  log('loading interface from', ROOT);
   mainWindow.loadURL('app://bench/index.html');
 }
 
@@ -286,6 +336,7 @@ ipcMain.handle('app:info', () => ({
 /* ---------------- lifecycle ---------------- */
 
 if (!app.requestSingleInstanceLock()) {
+  log('another instance already holds the lock; exiting');
   app.quit();
 } else {
   app.on('second-instance', (_e, argv) => {
@@ -298,6 +349,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    log('starting', app.getVersion(), 'electron', process.versions.electron, process.platform, process.arch);
     serveApp();
     hardenSession(session.defaultSession);
     buildMenu();
@@ -305,7 +357,7 @@ if (!app.requestSingleInstanceLock()) {
     const file = process.argv.find((a) => /\.pdf$/i.test(a));
     if (file) pendingOpen = file;
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
-  });
+  }).catch((err) => fatal('Startup failed.', err));
 
   app.on('open-file', (event, filePath) => {
     event.preventDefault();

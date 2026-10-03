@@ -1,6 +1,6 @@
 {
   "name": "pdf-bench",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A free, open-source, fully client-side PDF workbench \u2014 organize, annotate, fill, sign, convert and compress PDFs entirely in your browser.",
   "scripts": {
     "predev": "node scripts/prepare-assets.mjs",
