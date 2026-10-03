@@ -1,0 +1,124 @@
+{
+  "name": "pdf-bench",
+  "version": "1.0.0",
+  "description": "A free, open-source, fully client-side PDF workbench \u2014 organize, annotate, fill, sign, convert and compress PDFs entirely in your browser.",
+  "scripts": {
+    "predev": "node scripts/prepare-assets.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/prepare-assets.mjs",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:win:portable": "npm run build && electron-builder --win portable --x64",
+    "dist:dir": "npm run build && electron-builder --win --x64 --dir",
+    "test": "node test/make-fixture.mjs && node test/smoke.mjs && node test/features.mjs && node test/compare-ui.mjs",
+    "test:ocr": "node test/ocr.mjs",
+    "test:desktop": "npm run build && node scripts/desktop-smoke.mjs",
+    "test:features": "node test/features.mjs"
+  },
+  "keywords": [
+    "pdf",
+    "editor",
+    "ocr",
+    "redaction",
+    "offline",
+    "electron",
+    "privacy"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@cantoo/pdf-lib": "^2.9.1",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "jszip": "^3.10.1",
+    "pdfjs-dist": "^6.3.289",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.62.1",
+    "vite": "^8.2.2"
+  },
+  "private": false,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "org.pdfbench.app",
+    "productName": "PDF Bench",
+    "copyright": "MIT licensed. Free to use, modify and redistribute.",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "asar": true,
+    "compression": "maximum",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "fileAssociations": [
+        {
+          "ext": "pdf",
+          "name": "PDF document",
+          "role": "Editor"
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PDF Bench",
+      "uninstallDisplayName": "PDF Bench"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png"
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bumble-bee-999/pdf-bench.git"
+  }
+}

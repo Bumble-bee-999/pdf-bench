@@ -1,0 +1,23 @@
+name: Test
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      # The tests import source modules directly, so they run against the dev
+      # server rather than the built preview.
+      - run: npm run dev -- --host 127.0.0.1 &
+      - run: npx --yes wait-on http://127.0.0.1:5173
+      - run: npm test
+      - run: npm run test:ocr
+      - run: npm audit --omit=dev --audit-level=high
